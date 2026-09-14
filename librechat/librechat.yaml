@@ -1,0 +1,204 @@
+version: 1.3.15
+cache: true
+
+secureImageLinks: true
+
+webSearch:
+  searchProvider: "serper"
+  serperApiKey: "${SERPER_API_KEY}"
+
+  scraperProvider: "firecrawl"
+  firecrawlApiKey: "${FIRECRAWL_API_KEY}"
+  firecrawlVersion: "${FIRECRAWL_VERSION}"
+
+  rerankerType: "jina"
+  jinaApiKey: "${JINA_API_KEY}"
+
+  safeSearch: 0
+
+fileConfig:
+  serverFileSizeLimit: 1000
+  avatarSizeLimit: 10
+
+rateLimits:
+  fileUploads:
+    ipMax: 1000
+    ipWindowInMinutes: 1
+    userMax: 1000
+    userWindowInMinutes: 1
+  conversationsImport:
+    ipMax: 1000
+    ipWindowInMinutes: 1
+    userMax: 1000
+    userWindowInMinutes: 1
+  stt:
+    ipMax: 1000
+    ipWindowInMinutes: 1
+    userMax: 1000
+    userWindowInMinutes: 1
+  tts:
+    ipMax: 1000
+    ipWindowInMinutes: 1
+    userMax: 1000
+    userWindowInMinutes: 1
+
+memory:
+  disabled: true
+
+summarization:
+  provider: "anthropic"
+  model: "claude-sonnet-5"
+  maxSummaryTokens: 32768
+  reserveRatio: 0.05
+  trigger:
+    type: "token_ratio"
+    value: 0.95
+
+interface:
+  mcpServers:
+    use: true
+    create: false
+    share: false
+    public: false
+    configureObo: true
+  schedules:
+    use: true
+    create: true
+    maxPerUser: 100000
+    minIntervalMinutes: 1
+    autoDisableAfterFailures: 5
+    fireConcurrency: 5
+    requireProject: false
+  prompts:
+    use: true
+    create: true
+    share: false
+    public: false
+  agents:
+    use: true
+    create: true
+    share: false
+    public: false
+  skills:
+    use: true
+    create: true
+    share: false
+    public: false
+  marketplace:
+    use: false
+
+  modelSelect: true
+  contextCost: true
+
+  bookmarks: false
+  memories: false
+  feedback: false
+
+  temporaryChatRetention: 1
+  runCode: false
+
+  defaultPinnedTools:
+    - artifacts
+    - web_search
+    - file_search
+
+endpoints:
+  all:
+    titleConvo: true
+    titleTiming: "immediate"
+    maxToolResultChars: 100000
+
+  # anthropic:
+  #   apiKey: "${ANTHROPIC_API_KEY}"
+  #   titleModel: "claude-haiku-4-5-20251001"
+  # google:
+  #   apiKey: "${GOOGLE_KEY}"
+  #   titleModel: "gemini-2.5-flash"
+  # openAI:
+  #   apiKey: "${OPENAI_API_KEY}"
+  #   titleModel: "gpt-4o-mini"
+
+  custom:
+    - name: "OpenRouter"
+      apiKey: "${OPENROUTER_API_KEY}"
+      baseURL: "https://openrouter.ai/api/v1"
+      models:
+        default:
+          - "openai/gpt-4o-mini"
+        fetch: true
+      titleModel: "openai/gpt-4o-mini"
+      modelDisplayLabel: "OpenRouter"
+    # - name: "xai"
+    #   apiKey: "${XAI_API_KEY}"
+    #   baseURL: "https://api.x.ai/v1"
+    #   models:
+    #     default:
+    #       - "grok-4.5"
+    #     fetch: true
+    #   titleModel: "grok-4.20-0309-non-reasoning"
+    #   modelDisplayLabel: "Grok"
+
+  agents:
+    recursionLimit: 500
+    maxRecursionLimit: 100000
+    maxSubagents: 50
+    allowedProviders:
+      # - "anthropic"
+      # - "google"
+      # - "openAI"
+      - "OpenRouter"
+      # - "xai"
+    capabilities:
+      - "actions"
+      - "artifacts"
+      - "ask_user_question"
+      - "chain"
+      - "context"
+      - "deferred_tools"
+      - "file_search"
+      - "memory"
+      - "ocr"
+      - "programmatic_tools"
+      - "skills"
+      - "subagents"
+      - "tool_intents"
+      - "tools"
+      - "web_search"
+    skills:
+      maxCatalogSkills: 100
+    subagents:
+      enabled: true
+      allowSelf: true
+
+mcpSettings:
+  allowedAddresses:
+    - "mcp:8080"
+    - "playwright:8931"
+    - "connect.composio.dev"
+
+mcpServers:
+  LibreBoxMCP:
+    type: streamable-http
+    url: http://mcp:8080/mcp
+    timeout: 86400000
+
+  Playwright:
+    type: streamable-http
+    url: http://playwright:8931/mcp
+
+  Composio:
+    type: sse
+    url: https://connect.composio.dev/mcp
+    headers:
+      x-consumer-api-key: "${COMPOSIO_API_KEY}"
+
+  Serper:
+    command: "uvx"
+    args:
+      - "--from"
+      - "serper-mcp-server==0.0.10"
+      - "--with"
+      - "mcp[cli]<2"
+      - "serper-mcp-server"
+    env:
+      SERPER_API_KEY: "${SERPER_API_KEY}"

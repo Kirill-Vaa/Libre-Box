@@ -1,0 +1,265 @@
+name: libre-box
+
+services:
+  mongodb:
+    image: mongo@sha256:b8806ee8207318a30316eca72257da4c146025a80fdcdb4c597e596af9233ee3
+    container_name: libre-box-mongodb
+    command: ["--auth", "--wiredTigerCacheSizeGB", "0.5"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand('ping').ok\" | grep -q 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - data_mongo
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  librechat:
+    image: ghcr.io/danny-avila/librechat:latest
+    container_name: libre-box-librechat
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    env_file:
+      - ./librechat/.env
+    environment:
+      MONGO_URI: mongodb://${MONGODB_USER}:${MONGODB_PASSWORD}@mongodb:27017/LibreChat?authSource=admin
+      NODE_OPTIONS: "--max-old-space-size=768"
+    volumes:
+      - ./librechat/librechat.yaml:/app/librechat.yaml:ro
+      - librechat_images:/app/client/public/images
+      - librechat_uploads:/app/uploads
+      - ./logs/librechat:/app/logs
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+      - app
+      - data_mongo
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  nginx:
+    image: nginx:alpine
+    container_name: libre-box-nginx
+    depends_on:
+      - librechat
+    environment:
+      DOMAIN: ${DOMAIN}
+      NGINX_ENVSUBST_FILTER: "^DOMAIN$$"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - ./nginx/assets:/etc/nginx/assets:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/certbot:/var/www/certbot:ro
+      - ./logs/nginx:/var/log/nginx
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - NET_BIND_SERVICE
+      - SETGID
+      - SETUID
+    networks:
+      - edge
+      - edge_auth
+      - edge_files
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  sandbox:
+    build:
+      context: ./services/sandbox
+      dockerfile: Dockerfile
+    container_name: libre-box-sandbox
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_PTRACE
+    volumes:
+      - ./data:/root/data
+    restart: unless-stopped
+    networks:
+      - sandbox_net
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: "4"
+          pids: 4096
+
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: libre-box-docker-proxy
+    environment:
+      CONTAINERS: 1
+      EXEC: 1
+      INFO: 1
+      PING: 1
+      POST: 1
+      VERSION: 1
+      IMAGES: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      SERVICES: 0
+      SWARM: 0
+      TASKS: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+      - /tmp
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - socket
+    stop_grace_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  mcp:
+    build:
+      context: ./services/mcp
+      dockerfile: Dockerfile
+    container_name: libre-box-mcp
+    depends_on:
+      sandbox:
+        condition: service_healthy
+      docker-socket-proxy:
+        condition: service_started
+    env_file:
+      - ./.env
+      - ./librechat/.env
+    environment:
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+    volumes:
+      - ./data:/root/data
+      - ./logs/mcp:/app/logs
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - edge_auth
+      - app
+      - socket
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: libre-box-filebrowser
+    entrypoint: ["/bin/sh", "/init.sh"]
+    user: "0:0"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/files/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    volumes:
+      - ./data:/srv
+      - ./services/filebrowser/init.sh:/init.sh:ro
+      - filebrowser_db:/database
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
+      - NET_BIND_SERVICE
+    networks:
+      - edge_files
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  playwright:
+    image: mcr.microsoft.com/playwright/mcp:latest
+    container_name: libre-box-playwright
+    command: ["--headless", "--browser", "chromium", "--no-sandbox", "--isolated", "--port", "8931", "--host", "0.0.0.0", "--allowed-hosts", "playwright:8931", "--output-dir", "/home/node/data"]
+    working_dir: /home/node/data
+    environment:
+      PLAYWRIGHT_MCP_PING_TIMEOUT_MS: "60000"
+    volumes:
+      - ./data:/home/node/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+volumes:
+  mongo_data:
+    driver: local
+  librechat_images:
+    driver: local
+  librechat_uploads:
+    driver: local
+  filebrowser_db:
+    driver: local
+
+networks:
+  edge:
+    driver: bridge
+  edge_auth:
+    driver: bridge
+    internal: true
+  edge_files:
+    driver: bridge
+    internal: true
+  app:
+    driver: bridge
+  data_mongo:
+    driver: bridge
+    internal: true
+  socket:
+    driver: bridge
+    internal: true
+  sandbox_net:
+    driver: bridge

@@ -1,0 +1,47 @@
+[project]
+name = "libre-box-mcp"
+version = "1.0.0"
+description = "Libre Box — Sandbox MCP Server"
+requires-python = ">=3.13"
+dependencies = [
+    "aiodocker",
+    "fastapi",
+    "loguru",
+    "mcp",
+    "pydantic",
+    "pydantic-settings",
+    "pyjwt",
+    "starlette",
+    "uvicorn",
+    "uvloop; sys_platform != 'win32'",
+]
+
+[dependency-groups]
+dev = [
+    "mypy",
+    "ruff",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 200
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "ASYNC", "S", "A", "C4", "T20", "SIM", "RUF", "TID", "PIE"]
+ignore = ["E501", "S101", "S104", "S603", "S607", "ASYNC109"]
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["aiodocker.*", "mcp.*", "uvloop.*"]
+ignore_missing_imports = true
