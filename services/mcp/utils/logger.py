@@ -7,6 +7,9 @@ from typing import Final
 from loguru import logger
 
 
+__all__: list[str] = ["configure_file_sink", "logger", "set_console_level"]
+
+
 _STDOUT_FORMAT: str = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <magenta>{extra[request_id]}</magenta> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
 _FILE_FORMAT: str = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {extra[request_id]} | {name}:{function}:{line} - {message}"
 _ARCHIVE_RETENTION_DAYS: int = 14

@@ -29,7 +29,7 @@ class FileService:
         root = self._path_resolver.resolve(path)
         if mode == "files":
             command = ["fd", "--glob", "--hidden", "--no-ignore", "--max-results", str(max_results), pattern, str(root)]
-            success_codes = (0,)
+            success_codes: tuple[int, ...] = (0,)
         else:
             command = ["rg", "--line-number", "--no-heading", "--color", "never", "--max-count", str(max_results)]
             if glob is not None:
