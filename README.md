@@ -5,6 +5,7 @@
 Libre Box is a single–`docker compose` deployment that wraps LibreChat with a reverse proxy, browser automation, a web file manager, and — its centerpiece — a custom **Model Context Protocol (MCP) server** written in Python 3.13. That MCP server exposes shell, interactive sessions, background processes, and file operations backed by a heavyweight, fully-provisioned Ubuntu **sandbox** container. From any LibreChat conversation or agent, the model gets a genuine, persistent workstation preloaded with a vast development and security toolchain.
 
 <p>
+  <a href="https://github.com/Kirill-Vaa/Libre-Box/actions/workflows/lint.yml"><img alt="Lint" src="https://github.com/Kirill-Vaa/Libre-Box/actions/workflows/lint.yml/badge.svg?branch=main"></a>
   <img alt="Base Ubuntu 24.04" src="https://img.shields.io/badge/base-Ubuntu%2024.04-E95420?logo=ubuntu&logoColor=white">
   <img alt="Language Python 3.13" src="https://img.shields.io/badge/language-Python%203.13-3776AB?logo=python&logoColor=white">
   <img alt="Protocol MCP" src="https://img.shields.io/badge/protocol-MCP-6E56CF?logo=modelcontextprotocol&logoColor=white">

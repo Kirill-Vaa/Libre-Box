@@ -1,0 +1,48 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/mcp/**"
+      - ".github/workflows/lint.yml"
+  pull_request:
+    paths:
+      - "services/mcp/**"
+      - ".github/workflows/lint.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: ruff + mypy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/mcp
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up uv and Python 3.13
+        uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.13"
+          working-directory: services/mcp
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run ruff
+        run: uv run ruff check --output-format=github .
+
+      - name: Run mypy
+        if: ${{ !cancelled() }}
+        run: uv run mypy .
