@@ -99,6 +99,7 @@ services:
     build:
       context: ./services/sandbox
       dockerfile: Dockerfile
+    platform: linux/amd64
     container_name: libre-box-sandbox
     cap_add:
       - NET_ADMIN
