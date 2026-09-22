@@ -20,3 +20,5 @@ curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awsc
 
 GOBIN=/opt/gopath/bin /opt/go/bin/go install github.com/derailed/k9s@latest || true
 GOBIN=/opt/gopath/bin /opt/go/bin/go install sigs.k8s.io/kustomize/kustomize/v5@latest || true
+
+/opt/go/bin/go clean -cache -modcache

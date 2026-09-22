@@ -11,3 +11,6 @@ for tool in \
     frida-tools; do
     pipx install "$tool" || echo "pipx-sec: skipped $tool"
 done
+
+rm -rf /opt/state/cache/pip
+find /opt/pipx -name '__pycache__' -type d -prune -exec rm -rf {} +

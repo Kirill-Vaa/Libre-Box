@@ -21,3 +21,5 @@ install_go github.com/hakluke/hakrawler@latest
 install_go github.com/owasp-amass/amass/v4/...@master
 
 mv /opt/gopath/bin/httpx /opt/gopath/bin/httpx-pd 2>/dev/null || true
+
+"$GO" clean -cache -modcache

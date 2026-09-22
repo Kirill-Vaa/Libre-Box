@@ -10,3 +10,6 @@ for tool in \
 done
 
 pipx install --include-deps ansible || echo "pipx: skipped ansible"
+
+rm -rf /opt/state/cache/pip
+find /opt/pipx -name '__pycache__' -type d -prune -exec rm -rf {} +

@@ -21,3 +21,6 @@ python3 -m venv /opt/pytools
     pydub mutagen
 
 /opt/pytools/bin/python -m nltk.downloader -d /opt/nltk_data punkt stopwords || true
+
+rm -rf /opt/state/cache/pip
+find /opt/pytools -name '__pycache__' -type d -prune -exec rm -rf {} +

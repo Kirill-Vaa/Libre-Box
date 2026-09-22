@@ -44,3 +44,6 @@ mkdir -p /opt/pwsh && tar -xzf /tmp/pwsh.tgz -C /opt/pwsh && rm -f /tmp/pwsh.tgz
 
 curl -fsSL "https://julialang-s3.julialang.org/bin/linux/x64/${JULIA_VERSION%.*}/julia-${JULIA_VERSION}-linux-x86_64.tar.gz" -o /tmp/julia.tgz
 mkdir -p /opt/julia && tar -xzf /tmp/julia.tgz -C /opt/julia --strip-components=1 && rm -f /tmp/julia.tgz
+
+/opt/node/bin/npm cache clean --force
+rm -rf /opt/cargo/registry /opt/cargo/git /opt/state/cache/pip /opt/state/cache/uv

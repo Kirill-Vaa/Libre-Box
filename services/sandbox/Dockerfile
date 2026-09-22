@@ -40,8 +40,9 @@ RUN /tmp/scripts/71-sec-go.sh
 RUN /tmp/scripts/72-sec-pipx.sh
 RUN /tmp/scripts/73-sec-manual.sh
 RUN /tmp/scripts/74-sec-wordlists.sh
-RUN /opt/node/bin/npm install -g repomix && /opt/pipx/bin/pipx install files-to-prompt llm ttok || true
-RUN /tmp/scripts/90-cleanup.sh
+
+RUN /opt/node/bin/npm install -g repomix; /opt/pipx/bin/pipx install files-to-prompt llm ttok; /opt/node/bin/npm cache clean --force; rm -rf /opt/state/cache/pip
+RUN /tmp/scripts/90-cleanup.sh && rm -rf /tmp/scripts /tmp/versions.env
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
