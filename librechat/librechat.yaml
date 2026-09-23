@@ -174,7 +174,7 @@ mcpSettings:
   allowedAddresses:
     - "mcp:8080"
     - "playwright:8931"
-    - "connect.composio.dev"
+    - "connect.composio.dev:443"
 
 mcpServers:
   LibreBoxMCP:
