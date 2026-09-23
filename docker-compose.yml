@@ -28,7 +28,7 @@ services:
           memory: 512M
 
   librechat:
-    image: ghcr.io/danny-avila/librechat:latest
+    image: ghcr.io/danny-avila/librechat:v0.8.8-rc4
     container_name: libre-box-librechat
     depends_on:
       mongodb:
