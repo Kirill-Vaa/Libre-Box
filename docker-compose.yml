@@ -40,6 +40,8 @@ services:
       NODE_OPTIONS: "--max-old-space-size=768"
     volumes:
       - ./librechat/librechat.yaml:/app/librechat.yaml:ro
+      - ./librechat/plugins:/app/plugins:ro
+      - ./librechat/skill:/app/skill:ro
       - librechat_images:/app/client/public/images
       - librechat_uploads:/app/uploads
       - ./logs/librechat:/app/logs
