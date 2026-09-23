@@ -299,7 +299,7 @@ Everything below is set in [`services/sandbox/config/versions.env`](services/san
 |----------------------|-----------|-------------|----------|-----------|-----------------------|
 | .NET SDK channel     | `10.0`    | age         | `1.3.2`  | apktool   | `3.0.3`               |
 | Go                   | `1.27.1`  | D2          | `0.8.2`  | Chisel    | `1.12.0`              |
-| OpenJDK              | `25`      | duf         | `0.9.1`  | Ghidra    | `12.1.3` (`20260605`) |
+| OpenJDK              | `25`      | duf         | `0.9.1`  | Ghidra    | `12.1.4` (`20260921`) |
 | Julia                | `1.12.7`  | Helm        | `4.2.4`  | gitleaks  | `8.30.1`              |
 | Node.js              | `24.20.0` | shfmt       | `3.14.0` | jadx      | `1.5.6`               |
 | PowerShell           | `7.6.5`   | sops        | `3.13.3` | ligolo-ng | `0.9.1`               |
