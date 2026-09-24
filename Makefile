@@ -82,9 +82,23 @@ vpn-status: ## Show the sandbox public egress IP (through VPN if enabled)
 data-size: ## Show the size of the shared data workspace
 	@du -sh data 2>/dev/null || echo "data/ is empty"
 
-clear-logs: ## Truncate active log files
-	@find logs -type f -name '*.log' -exec truncate -s 0 {} + 2>/dev/null || true
-	@echo "Cleared active log files"
+clear-logs: ## Clear the host log files under logs/ (deletes them when the stack is down)
+	@if [ ! -d logs ]; then \
+		echo "No logs/ directory to clear"; \
+	elif running=$$($(COMPOSE) ps -q --status running 2>/dev/null) && [ -z "$$running" ]; then \
+		find logs -type f -delete 2>/dev/null; \
+		if [ -z "$$(find logs -type f 2>/dev/null)" ]; then \
+			echo "Removed host log files under logs/"; \
+		else \
+			echo "Some files under logs/ could not be removed, retry with sudo"; \
+			exit 1; \
+		fi; \
+	elif find logs -type f -exec truncate -s 0 {} + 2>/dev/null; then \
+		echo "Truncated host log files under logs/, the files stay in place"; \
+	else \
+		echo "Some files under logs/ are not writable, retry with sudo"; \
+		exit 1; \
+	fi
 
 clean: ## Remove containers AND volumes (DESTROYS DATA). Requires CONFIRM=yes
 	@[ "$(CONFIRM)" = "yes" ] || { echo "Refusing without CONFIRM=yes"; exit 1; }
