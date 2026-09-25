@@ -51,8 +51,8 @@ memory:
   disabled: true
 
 summarization:
-  provider: "anthropic"
-  model: "claude-sonnet-5"
+  provider: "OpenRouter"
+  model: "anthropic/claude-sonnet-5"
   maxSummaryTokens: 32768
   reserveRatio: 0.05
   trigger:
@@ -107,7 +107,6 @@ interface:
   defaultPinnedTools:
     - artifacts
     - web_search
-    - file_search
 
 endpoints:
   all:
@@ -162,7 +161,6 @@ endpoints:
       - "chain"
       - "context"
       - "deferred_tools"
-      - "file_search"
       - "memory"
       - "ocr"
       - "programmatic_tools"
@@ -194,18 +192,7 @@ mcpServers:
     url: http://playwright:8931/mcp
 
   Composio:
-    type: sse
+    type: streamable-http
     url: https://connect.composio.dev/mcp
     headers:
       x-consumer-api-key: "${COMPOSIO_API_KEY}"
-
-  Serper:
-    command: "uvx"
-    args:
-      - "--from"
-      - "serper-mcp-server==0.0.10"
-      - "--with"
-      - "mcp[cli]<2"
-      - "serper-mcp-server"
-    env:
-      SERPER_API_KEY: "${SERPER_API_KEY}"
