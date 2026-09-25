@@ -55,12 +55,12 @@ Libre Box is a single–`docker compose` deployment that wraps LibreChat with a 
 
 Most self-hosted chat UIs stop at text. Libre Box is built for **agentic** work — the model doesn't just talk about running a command, it runs it, on a machine that persists state across turns:
 
-- 🖥️ **A real computer, not a toy REPL.** Agents get `bash`, interactive TTY sessions, detached background processes, and a full filesystem — all inside an isolated container.
-- 🧰 **Batteries wildly included.** The sandbox ships dozens of languages and runtimes, a complete data/ML Python stack, document and media pipelines, database and cloud clients, and an extensive security toolkit.
-- 🧭 **Opinionated out of the box.** A production-grade [example system prompt](#the-agent-prompt) ships with the stack, so the agent actually *uses* the machine — topic-scoped workspaces, background jobs, resumable work, and artifacts handed back as links.
-- 🔒 **Hardened by default.** TLS everywhere, segmented internal networks, dropped Linux capabilities, a read-only Docker-socket proxy, workspace path-traversal guards, rate limiting, and single-sign-on between LibreChat and the file manager.
-- 🧩 **Composable.** Browser automation (Playwright), hosted integrations (Composio), and web search (Serper) are wired in as first-class MCP servers alongside LibreChat's own agents, skills, subagents, and scheduled runs.
-- 🌐 **Egress control.** An optional WireGuard overlay routes all sandbox and browser traffic through a VPN.
+- **A real computer, not a toy REPL.** Agents get `bash`, interactive TTY sessions, detached background processes, and a full filesystem — all inside an isolated container.
+- **Batteries wildly included.** The sandbox ships dozens of languages and runtimes, a complete data/ML Python stack, document and media pipelines, database and cloud clients, and an extensive security toolkit.
+- **Opinionated out of the box.** A production-grade [example system prompt](#the-agent-prompt) ships with the stack, so the agent actually *uses* the machine — topic-scoped workspaces, background jobs, resumable work, and results handed back as links.
+- **Hardened by default.** TLS everywhere, segmented internal networks, dropped Linux capabilities, a read-only Docker-socket proxy, workspace path-traversal guards, rate limiting, and single-sign-on between LibreChat and the file manager.
+- **Composable.** Browser automation (Playwright) and hosted integrations (Composio) are wired in as first-class MCP servers alongside LibreChat's own web search, artifacts, agents, skills, subagents, and scheduled runs.
+- **Egress control.** An optional WireGuard overlay routes all sandbox and browser traffic through a VPN.
 
 ---
 
@@ -413,9 +413,22 @@ The MCP server and the sandbox give the model *capability*; a system prompt give
 
 ### Using and adapting it
 
-Create an Agent in LibreChat, enable the `LibreBoxMCP` server (required — it is the sandbox), and paste the example into the Agent's **Instructions** field. The prompt also anticipates the two web-facing servers it names — `Serper` (web search) and `Playwright` (browser automation) — so enable those if you want the agent to reach the web; `Composio` (hosted integrations) is wired in too, though this example doesn't speak to it. Nothing else is required — the prompt is plain Markdown and assumes only the tools this stack already provides.
+Create an Agent in LibreChat, enable the `LibreBoxMCP` server (required — it is the sandbox), and paste the example into the Agent's **Instructions** field. The prompt also speaks to four optional capabilities, each a toggle on the agent itself — turn on the ones you want, and the prompt degrades gracefully around the rest:
 
-Because it is an example, expect to edit it: rewrite the persona, tighten the tone, or drop sections you don't want. Three things are worth keeping in sync if you change the stack itself:
+| Capability                                          | What it gives the agent                                                                                                                                                                    |
+|-----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Web search** and the `Playwright` server          | The two web-facing tools the prompt names: search and simple page fetches, plus a headless Chromium for interactive or JavaScript-heavy pages.                                             |
+| **Artifacts**                                       | Answers that *run*: HTML/CSS/JS pages, React components and Mermaid diagrams render live in a panel beside the chat instead of arriving as a block to paste somewhere else.                |
+| **Ask User**                                        | Clarifying questions that pause the run until the user answers — the way Claude Code does — instead of guessing or ending the turn with a question.                                        |
+| **Subagents** + **Allow self-spawn** (**Advanced**) | Delegation of a self-contained subtask to a fresh instance of the same agent in its own context window; only the final result comes back, so verbose work never lands in the conversation. |
+
+`Composio` (hosted integrations) is wired in too, though this example doesn't speak to it. Nothing else is required — the prompt is plain Markdown and assumes only the tools this stack already provides.
+
+Because it is an example, expect to edit it: rewrite the persona, tighten the tone, or drop sections you don't want. If the agent starts answering with an empty message, that is the model's own safety filter refusing, and the *Networking, diagnostics & analysis utilities* inventory is the first thing to cut. Three things are worth keeping in sync if you change the stack itself:
+
+- **Paths and delivery rules.** The prompt hard-codes the workspace (`/root/data/<topic>/`), the browser's view of it (`/home/node/data/<topic>/`), and the `/files/…` manager links files are handed back as. Move a mount and these have to move with it.
+- **The tool roster.** Each section names the tools it governs — sandbox tools, web search, Playwright, Artifacts, Ask User, subagents. Add or drop an MCP server or a capability and the matching section should follow, so the agent is never instructed to use something it doesn't have.
+- **The toolchain inventory.** The *Preinstalled toolchain* list mirrors what the sandbox image actually ships. If you edit the install scripts under `services/sandbox/scripts/`, edit that list too — otherwise the agent plans around packages that aren't there.
 
 ---
 
@@ -538,9 +551,9 @@ Loaded by both the `librechat` and the `mcp` containers.
 
 The shipped configuration (schema `version: 1.3.16`) turns on the agentic surface of LibreChat:
 
-- **MCP servers:** `LibreBoxMCP` (streamable-HTTP to `mcp:8080/mcp`, 24-hour client timeout so long tool calls don't get cut off), `Playwright` (`playwright:8931/mcp`), `Serper` (stdio, `uvx serper-mcp-server==0.0.10`) and `Composio` (hosted SSE). Outbound MCP addresses are allowlisted in `mcpSettings.allowedAddresses`, and the UI re-polls tool lists and server status every 30 seconds (`toolsRefreshInterval`, `statusRefreshInterval`).
-- **Agents:** `recursionLimit: 500`, `maxSubagents: 50`, subagents enabled (including self-delegation), and 15 capabilities (`actions`, `artifacts`, `ask_user_question`, `chain`, `context`, `deferred_tools`, `file_search`, `memory`, `ocr`, `programmatic_tools`, `skills`, `subagents`, `tool_intents`, `tools`, `web_search`). `allowedProviders` gates which endpoints agents may use.
-- **Interface:** prompts, agents, skills (catalog capped at 100) and **schedules** are usable and creatable but never shared or public; the agent marketplace, bookmarks, memories and feedback are off; `runCode` is off (the sandbox replaces it); `modelSelect` and `contextCost` are on; `defaultPinnedTools` are `artifacts`, `web_search`, `file_search`.
+- **MCP servers:** `LibreBoxMCP` (streamable-HTTP to `mcp:8080/mcp`, 24-hour client timeout so long tool calls don't get cut off), `Playwright` (`playwright:8931/mcp`) and `Composio`. Outbound MCP addresses are allowlisted in `mcpSettings.allowedAddresses`, and the UI re-polls tool lists and server status every 30 seconds (`toolsRefreshInterval`, `statusRefreshInterval`).
+- **Agents:** `recursionLimit: 500`, `maxSubagents: 50`, subagents enabled (including self-delegation), and 14 capabilities (`actions`, `artifacts`, `ask_user_question`, `chain`, `context`, `deferred_tools`, `memory`, `ocr`, `programmatic_tools`, `skills`, `subagents`, `tool_intents`, `tools`, `web_search`). These only *permit* a feature — each agent still switches on the ones it needs in the agent builder. `allowedProviders` gates which endpoints agents may use.
+- **Interface:** prompts, agents, skills (catalog capped at 100) and **schedules** are usable and creatable but never shared or public; the agent marketplace, bookmarks, memories and feedback are off; `runCode` is off (the sandbox replaces it); `modelSelect` and `contextCost` are on; `defaultPinnedTools` are `artifacts`, `web_search`.
 - **Web search:** Serper as search provider, Firecrawl as scraper, Jina as reranker.
 - **Conversation handling:** immediate title generation, `maxToolResultChars: 100000`, and token-ratio summarization at 95 % of the window.
 
@@ -600,12 +613,13 @@ make vpn-status
 ## Using Libre Box
 
 1. **Sign in** to LibreChat at your domain.
-2. **Enable MCP tools.** Create or open an **Agent** and enable the servers you want: `LibreBoxMCP` (the sandbox — required), plus optionally `Serper` (web search), `Playwright` (browser automation), and `Composio` (hosted integrations). LibreChat's MCP integration is on by default; server creation and sharing are disabled per `librechat.yaml`.
-3. **Give the agent its instructions.** Paste the example prompt [`agent/EXAMPLE_PROMPT.md`](agent/EXAMPLE_PROMPT.md) into the Agent's **Instructions** field — see [The agent prompt](#the-agent-prompt) for what it establishes and what to keep in sync if you adapt it. Skipping this step is the most common reason an otherwise-working stack still answers in plain text instead of using the sandbox.
-4. **Ask the model to *do* things** — install a package, clone and analyze a repo, run a long build in the background and tail its logs, render a document with Typst/Pandoc, scan a target you're authorized to test, and so on. State persists across turns, and interactive sessions keep cwd and shell state between calls.
-5. **Go further with agents** — subagents, skills, artifacts and schedules are enabled, so recurring or multi-step jobs can be delegated and re-run on a cron-like cadence. Skills and plugins that should exist for the whole deployment rather than one account go into [`librechat/skill/` and `librechat/plugins/`](#deployment-plugins-and-skills).
-6. **Browse the workspace** via the **Files** button at the bottom of LibreChat's left rail, or directly at `https://your.domain/files/` — the same `./data` directory the agent works in, gated by your LibreChat login.
-7. **Web search** works out of the box once Serper/Firecrawl/Jina keys are set.
+2. **Enable MCP tools.** Create or open an **Agent** and enable the servers you want: `LibreBoxMCP` (the sandbox — required), plus optionally `Playwright` (browser automation) and `Composio` (hosted integrations). LibreChat's MCP integration is on by default; server creation and sharing are disabled per `librechat.yaml`.
+3. **Enable the agent's own capabilities.** In the same builder, **Web Search**, **Artifacts** (code that renders live beside the chat) and **Ask User** (clarifying questions that pause the run) sit alongside the MCP servers; **Subagents** and **Allow self-spawn** are under **Advanced**, and let the agent delegate subtasks to a fresh instance of itself. All four are optional — the shipped prompt uses each one when it's present and reads fine without it.
+4. **Give the agent its instructions.** Paste the example prompt [`agent/EXAMPLE_PROMPT.md`](agent/EXAMPLE_PROMPT.md) into the Agent's **Instructions** field — see [The agent prompt](#the-agent-prompt) for what it establishes and what to keep in sync if you adapt it. Skipping this step is the most common reason an otherwise-working stack still answers in plain text instead of using the sandbox.
+5. **Ask the model to *do* things** — install a package, clone and analyze a repo, run a long build in the background and tail its logs, render a document with Typst/Pandoc, scan a target you're authorized to test, and so on. State persists across turns, and interactive sessions keep cwd and shell state between calls.
+6. **Go further with agents** — subagents, skills, artifacts and schedules are enabled, so recurring or multi-step jobs can be delegated and re-run on a cron-like cadence. Skills and plugins that should exist for the whole deployment rather than one account go into [`librechat/skill/` and `librechat/plugins/`](#deployment-plugins-and-skills).
+7. **Browse the workspace** via the **Files** button at the bottom of LibreChat's left rail, or directly at `https://your.domain/files/` — the same `./data` directory the agent works in, gated by your LibreChat login.
+8. **Web search** works out of the box once the Serper/Firecrawl/Jina keys are set.
 
 ---
 
@@ -659,6 +673,7 @@ Every target is a thin wrapper around `docker compose` and honours `COMPOSE_FILE
 
 | Symptom                                                                   | Cause and fix                                                                                                                                                                                                                         |
 |---------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| The agent answers with an empty message                                   | The model's own safety filter refused the completion — the prompt's offensive-security inventory is the usual trigger. Drop the *Networking, diagnostics & analysis utilities* bullet from the agent's Instructions.                  |
 | The sandbox build crawls, or the container exits with `exec format error` | The sandbox image is `linux/amd64` only. On an arm64 host it runs emulated: enable Rosetta or binfmt in Docker Desktop (elsewhere, `docker run --privileged tonistiigi/binfmt --install amd64`) and expect a much slower first build. |
 | LibreChat crash-loops with `EACCES: permission denied, '/app/logs'`       | `logs/librechat/` is not owned by uid `1000`. Run `make init-dirs`, or `chown -R 1000:1000 data logs/librechat`.                                                                                                                      |
 | `mcp` never starts                                                        | It waits for the sandbox healthcheck (`/root/.box/ready`). Check `make logs-sandbox`; on the very first run the image build simply takes a long time.                                                                                 |
