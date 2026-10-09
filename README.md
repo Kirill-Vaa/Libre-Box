@@ -72,7 +72,7 @@ Libre Box is a set of small, single-purpose containers orchestrated by `docker-c
 %%{init: {"theme":"base","themeVariables":{"fontSize":"14px","textColor":"#7d8590","lineColor":"#8b9bb4","primaryColor":"#eef2ff","primaryTextColor":"#312e81","primaryBorderColor":"#6366f1","clusterBkg":"transparent","clusterBorder":"#94a3b8","edgeLabelBackground":"#ffffff"}}}%%
 flowchart TB
     accTitle: Libre Box container topology
-    accDescr: nginx is the only service that publishes ports, and it fronts both LibreChat and FileBrowser over separate networks, so FileBrowser and the auth gate are reachable from nginx alone. LibreChat drives the MCP server and Playwright over streamable-HTTP, and the MCP server reaches the sandbox only through a read-only Docker socket proxy.
+    accDescr: nginx is the only service that publishes ports, and it fronts both LibreChat and FileBrowser over separate networks, so FileBrowser and the auth gate are reachable from nginx alone. LibreChat drives the MCP server and Playwright over streamable-HTTP, the MCP server reaches the sandbox only through a read-only Docker socket proxy, and Playwright opens servers in the sandbox over sandbox_net.
 
     Client(["Browser / Cloudflare"])
 
@@ -111,6 +111,7 @@ flowchart TB
     LC -->|"authenticated"| MONGO
     MCP -->|"docker exec"| PROXY
     PROXY --> SANDBOX
+    PW -->|"HTTP to sandbox:port"| SANDBOX
 
     classDef external fill:#ffffff,stroke:#94a3b8,stroke-width:1px,color:#0f172a
     classDef edgeSvc fill:#fff4e6,stroke:#f59e0b,stroke-width:1px,color:#7c2d12
@@ -141,7 +142,7 @@ The shared workspace is deliberately left out here — it spans every tier and g
 | **docker-socket-proxy** | `tecnativa/docker-socket-proxy:latest`       | Capability-restricted gateway to the Docker socket (mounted read-only)                                      | `socket`                          | —           | 64M    |
 | **mcp**                 | *built* `./services/mcp`                     | Custom MCP server: shell / session / background / file / system tools, plus the JWT auth gate               | `edge_auth`, `app`, `socket`      | —           | 512M   |
 | **filebrowser**         | `filebrowser/filebrowser:latest`             | Web file manager over the shared workspace, proxy-authenticated                                             | `edge_files`                      | —           | 256M   |
-| **playwright**          | `mcr.microsoft.com/playwright/mcp:latest`    | Headless Chromium browser-automation MCP (`--isolated`, per-session contexts) on `:8931`                    | `app`                             | —           | 1G     |
+| **playwright**          | `mcr.microsoft.com/playwright/mcp:latest`    | Headless Chromium browser-automation MCP (`--isolated`, per-session contexts) on `:8931`                    | `app`, `sandbox_net`              | —           | 1G     |
 | **vpn** *(overlay)*     | `qmcgaw/gluetun:latest`                      | Optional WireGuard egress for sandbox + playwright                                                          | `app` (alias `playwright`)        | —           | 512M   |
 
 Every service sets `restart: unless-stopped`, a memory limit, and a graceful `stop_grace_period`, and all but the intentionally-privileged `sandbox` add `no-new-privileges`. The `sandbox` additionally carries CPU (`4`) and PID (`4096`) limits.
@@ -160,7 +161,7 @@ Traffic is compartmentalized so a compromise of one tier cannot reach the others
 | `app`         | no        | librechat, mcp, playwright | Inter-service application traffic                     |
 | `data_mongo`  | **yes**   | mongodb, librechat         | Database access only                                  |
 | `socket`      | **yes**   | docker-socket-proxy, mcp   | Brokered Docker access only                           |
-| `sandbox_net` | no        | sandbox                    | Sandbox egress (replaced by the VPN in the overlay)   |
+| `sandbox_net` | no        | sandbox, playwright        | Sandbox egress (replaced by the VPN in the overlay)   |
 
 ### Request & authentication flow
 
@@ -180,6 +181,8 @@ Two different execution surfaces share one filesystem. `./data` on the host is b
 | `file_*`, `directory_*`                            | the **MCP** container itself (`rg` and `fd` are installed there) | only `/root/data`, enforced by `PathResolver`                                  |
 
 A file written with `file_write` is immediately visible to `shell_execute`, to Playwright's screenshot output, and in FileBrowser. Background-process logs are the exception: they live at `BACKGROUND_LOG_DIR` (`/root/.box/logs`) **inside the sandbox**, not in the shared workspace.
+
+The browser opens workspace files as `file:///home/node/data/<rel>` (enabled by `--allow-unrestricted-file-access`) and servers started in the sandbox as `http://sandbox:<port>`, because Playwright also joins `sandbox_net`; such servers must bind `0.0.0.0`. Playwright's auto-named output (page snapshots, console logs, unnamed screenshots) goes to `data/.playwright/`, which is safe to delete.
 
 ---
 
@@ -439,19 +442,19 @@ Because it is an example, expect to edit it: rewrite the persona, tighten the to
 
 ## Security model
 
-| Control                      | How                                                                                                                                                                                                                                                                                                                                                                  |
-|------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **TLS**                      | TLS 1.2/1.3 only, modern cipher suite, HSTS (2 years, `includeSubDomains`), session tickets off, 1-day session timeout.                                                                                                                                                                                                                                              |
-| **Edge hardening**           | Security headers (`X-Content-Type-Options`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, `Permissions-Policy`, CSP **report-only**), `server_tokens off`, unknown-host reset (`444` + `ssl_reject_handshake`).                                                                                                                                                  |
-| **Rate & connection limits** | 30 r/s general (burst 100), 5 r/s on `/api/auth/` (burst 10), 50 concurrent connections per IP; `429` on breach.                                                                                                                                                                                                                                                     |
-| **Real client IP**           | Cloudflare IPv4/IPv6 ranges trusted for `CF-Connecting-IP`.                                                                                                                                                                                                                                                                                                          |
-| **Least privilege**          | `no-new-privileges` on every service except the deliberately-privileged sandbox; nginx, mcp, and filebrowser drop **all** capabilities (mcp re-adds none; nginx keeps `CHOWN`/`NET_BIND_SERVICE`/`SETGID`/`SETUID`, filebrowser keeps `DAC_OVERRIDE`/`NET_BIND_SERVICE` so root-owned agent output stays manageable).                                                |
-| **Brokered Docker access**   | The MCP server reaches Docker only via a capability-restricted `docker-socket-proxy` (socket mounted `:ro`, container root filesystem `read_only` with tmpfs `/run` and `/tmp`): it enables only `CONTAINERS`/`EXEC`/`INFO`/`PING`/`POST`/`VERSION`, disabling `IMAGES`/`NETWORKS`/`VOLUMES`/`SERVICES`/`SWARM`/`TASKS`.                                             |
-| **Network isolation**        | Every backend shares a network only with the service that must reach it: FileBrowser sits alone with nginx on `edge_files`, the auth gate on `edge_auth`, and both — like `data_mongo` and `socket` — are marked `internal` (no external route). LibreChat cannot address `filebrowser:80`, and the MCP server cannot either. No service but nginx publishes a port. |
-| **Workspace confinement**    | MCP file tools resolve every path and reject traversal outside `/root/data`.                                                                                                                                                                                                                                                                                         |
-| **MCP transport allowlists** | The MCP server only accepts a `Host` of `mcp`, `localhost` or `127.0.0.1`; LibreChat only dials MCP addresses on its `mcpSettings.allowedAddresses` list (`mcp:8080`, `playwright:8931`, `connect.composio.dev:443`); Playwright MCP itself only accepts `Host: playwright:8931`.                                                                                    |
-| **SSO for the file manager** | FileBrowser publishes no port, runs with `--auth.method=proxy --auth.header=X-Auth-User`, and shares a network with nothing but nginx — which always overwrites `X-Auth-User` with the auth gate's answer, so the header cannot be forged from another container. Its bootstrap admin account is created with a random 16-byte password.                             |
-| **Secrets**                  | All credentials come from `.env` files that are git-ignored; only `*.example` templates are committed. `vpn/*.conf` and `nginx/certs/*` are ignored too.                                                                                                                                                                                                             |
+| Control                      | How                                                                                                                                                                                                                                                                                                                                      |
+|------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **TLS**                      | TLS 1.2/1.3 only, modern cipher suite, HSTS (2 years, `includeSubDomains`), session tickets off, 1-day session timeout.                                                                                                                                                                                                                  |
+| **Edge hardening**           | Security headers (`X-Content-Type-Options`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, `Permissions-Policy`, CSP **report-only**), `server_tokens off`, unknown-host reset (`444` + `ssl_reject_handshake`).                                                                                                                      |
+| **Rate & connection limits** | 30 r/s general (burst 100), 5 r/s on `/api/auth/` (burst 10), 50 concurrent connections per IP; `429` on breach.                                                                                                                                                                                                                         |
+| **Real client IP**           | Cloudflare IPv4/IPv6 ranges trusted for `CF-Connecting-IP`.                                                                                                                                                                                                                                                                              |
+| **Least privilege**          | `no-new-privileges` on every service except the deliberately-privileged sandbox; nginx, mcp, and filebrowser drop **all** capabilities (mcp re-adds none; nginx keeps `CHOWN`/`NET_BIND_SERVICE`/`SETGID`/`SETUID`, filebrowser keeps `DAC_OVERRIDE`/`NET_BIND_SERVICE` so root-owned agent output stays manageable).                    |
+| **Brokered Docker access**   | The MCP server reaches Docker only via a capability-restricted `docker-socket-proxy` (socket mounted `:ro`, container root filesystem `read_only` with tmpfs `/run` and `/tmp`): it enables only `CONTAINERS`/`EXEC`/`INFO`/`PING`/`POST`/`VERSION`, disabling `IMAGES`/`NETWORKS`/`VOLUMES`/`SERVICES`/`SWARM`/`TASKS`.                 |
+| **Network isolation**        | Each backend shares a network only with the services that must reach it; `edge_auth`, `edge_files`, `data_mongo` and `socket` are `internal`. Only nginx publishes ports. The sandbox can reach `playwright:8931` over `sandbox_net`.                                                                                                    |
+| **Workspace confinement**    | MCP file tools resolve every path and reject traversal outside `/root/data`.                                                                                                                                                                                                                                                             |
+| **MCP transport allowlists** | The MCP server only accepts a `Host` of `mcp`, `localhost` or `127.0.0.1`; LibreChat only dials MCP addresses on its `mcpSettings.allowedAddresses` list (`mcp:8080`, `playwright:8931`, `connect.composio.dev:443`); Playwright MCP itself only accepts `Host: playwright:8931`.                                                        |
+| **SSO for the file manager** | FileBrowser publishes no port, runs with `--auth.method=proxy --auth.header=X-Auth-User`, and shares a network with nothing but nginx — which always overwrites `X-Auth-User` with the auth gate's answer, so the header cannot be forged from another container. Its bootstrap admin account is created with a random 16-byte password. |
+| **Secrets**                  | All credentials come from `.env` files that are git-ignored; only `*.example` templates are committed. `vpn/*.conf` and `nginx/certs/*` are ignored too.                                                                                                                                                                                 |
 
 > The sandbox itself is intentionally powerful (it holds `NET_ADMIN`/`NET_RAW`/`SYS_PTRACE` for the security toolchain and runs without `no-new-privileges`). Treat it as a privileged blast-radius: keep it on an isolated host/network, and consider the [VPN overlay](#vpn-egress-optional) to control its egress.
 
@@ -597,7 +600,7 @@ Then:
 
 ## VPN egress (optional)
 
-`docker-compose.vpn.yml` adds a [gluetun](https://github.com/qdm12/gluetun) WireGuard client and moves the **sandbox** and **playwright** containers into the VPN's network namespace (`network_mode: service:vpn`), so *all* of their outbound traffic exits through the tunnel. The gluetun container takes the `playwright` network alias on the `app` network and opens inbound port `8931` in its firewall, so LibreChat still reaches the Playwright MCP at `playwright:8931`. The sandbox stays reachable too, because the MCP server drives it through the Docker socket proxy rather than over the network.
+`docker-compose.vpn.yml` adds a [gluetun](https://github.com/qdm12/gluetun) WireGuard client and moves the **sandbox** and **playwright** containers into the VPN's network namespace (`network_mode: service:vpn`), so *all* of their outbound traffic exits through the tunnel. The gluetun container takes the `playwright` network alias on the `app` network and opens inbound port `8931` in its firewall, so LibreChat still reaches the Playwright MCP at `playwright:8931`. The sandbox stays reachable too, because the MCP server drives it through the Docker socket proxy rather than over the network. The browser then opens sandbox servers at `http://localhost:<port>`, since both containers share the VPN's network stack.
 
 ```bash
 # Provide a WireGuard config (git-ignored)

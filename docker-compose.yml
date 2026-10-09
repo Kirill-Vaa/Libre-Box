@@ -220,7 +220,7 @@ services:
   playwright:
     image: mcr.microsoft.com/playwright/mcp:latest
     container_name: libre-box-playwright
-    command: ["--headless", "--browser", "chromium", "--no-sandbox", "--isolated", "--port", "8931", "--host", "0.0.0.0", "--allowed-hosts", "playwright:8931", "--output-dir", "/home/node/data"]
+    command: ["--headless", "--browser", "chromium", "--no-sandbox", "--isolated", "--port", "8931", "--host", "0.0.0.0", "--allowed-hosts", "playwright:8931", "--allow-unrestricted-file-access", "--output-dir", "/home/node/data/.playwright"]
     working_dir: /home/node/data
     environment:
       PLAYWRIGHT_MCP_PING_TIMEOUT_MS: "60000"
@@ -231,6 +231,7 @@ services:
       - no-new-privileges:true
     networks:
       - app
+      - sandbox_net
     stop_grace_period: 30s
     deploy:
       resources:
