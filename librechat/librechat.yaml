@@ -156,7 +156,7 @@ endpoints:
       # - "xai"
     askUserQuestion:
       retainedAnswers:
-      enabled: false
+        enabled: false
     capabilities:
       - "actions"
       - "artifacts"
